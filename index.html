@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robotic Arm Kinematics - Blueprint</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="blueprint-container" id="main-container">
+        
+        <header class="doc-header">
+            <div>
+                <h1>PROJECT: ROBOTIC ARM KINEMATICS</h1>
+                <p>DOC NO: SYS-09-REV-L &nbsp;&nbsp;|&nbsp;&nbsp; SCALE: 1:1 &nbsp;&nbsp;|&nbsp;&nbsp; SOLVER: FULLSCREEN COLLISIONS</p>
+            </div>
+            <div class="stamp">APPROVED</div>
+        </header>
+
+        <!-- GLOBAL SETTINGS BAR -->
+        <div class="settings-bar">
+            <div class="settings-group">
+                <label>LENGTH UNIT:</label>
+                <select id="setting-length" onchange="changeLengthUnit(this.value)">
+                    <option value="mm" selected>Millimeters (mm)</option>
+                    <option value="cm">Centimeters (cm)</option>
+                    <option value="m">Meters (m)</option>
+                </select>
+
+                <label style="margin-left: 15px;">ANGLE UNIT:</label>
+                <select id="setting-angle" onchange="changeAngleUnit(this.value)">
+                    <option value="deg" selected>Degrees (°)</option>
+                    <option value="rad">Radians (rad)</option>
+                </select>
+
+                <label style="margin-left: 15px;">DH CONVENTION:</label>
+                <select id="setting-dh" onchange="changeDHConvention(this.value)">
+                    <option value="standard" selected>Standard DH (Craig / Spong)</option>
+                    <option value="modified">Modified DH (Khalil)</option>
+                </select>
+            </div>
+        </div>
+
+        <section class="panel">
+            <h2>0.0 STANDARD ROBOTS & FILE MANAGEMENT</h2>
+            <div class="preset-buttons">
+                <button class="btn" onclick="loadPreset('sixDof')">6-DOF</button>
+                <button class="btn" onclick="loadPreset('articulated')">ARTICULATED</button>
+                <button class="btn" onclick="loadPreset('scara')">SCARA</button>
+                <button class="btn" onclick="loadPreset('cylindrical')">CYLINDRICAL</button>
+                <button class="btn" onclick="loadPreset('cartesian')">CARTESIAN</button>
+            </div>
+            
+            <div class="file-io-bar" style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--border-panel);">
+                <button class="btn btn-io" onclick="exportJSON()">⬇ EXPORT JSON</button>
+                <button class="btn btn-io" onclick="exportCSV()">⬇ EXPORT CSV</button>
+                <button class="btn btn-io" onclick="document.getElementById('import-json').click()">⬆ IMPORT JSON</button>
+                <input type="file" id="import-json" style="display:none;" accept=".json" onchange="importJSON(event)">
+                <button class="btn" style="background: var(--text-highlight); color: var(--bg-blue); font-weight: bold; float: right;" onclick="generateShareLink()">🔗 GET SHARE LINK</button>
+            </div>
+        </section>
+
+        <!-- DH Parameters Table Section -->
+        <section class="panel">
+            <div class="panel-header">
+                <h2>1.0 DENAVIT-HARTENBERG (DH) PARAMETERS</h2>
+                <div>
+                    <button class="btn btn-alert" onclick="openModal()">[?] CHEAT SHEET</button>
+                    <button class="btn" onclick="addJoint()">+ ADD JOINT</button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>JOINT (i)</th>
+                            <th>TYPE</th>
+                            <th>θ (THETA) <span id="hdr-ang1">°</span></th>
+                            <th>d (OFFSET) <span class="unit-text">mm</span></th>
+                            <th>a (LENGTH) <span class="unit-text">mm</span></th>
+                            <th>α (ALPHA) <span id="hdr-ang2">°</span></th>
+                            <th>LIMITS (MIN / MAX)</th>
+                            <th>Q-OPTS</th>
+                            <th class="highlight-col">VAR (q)</th>
+                            <th>ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dh-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="grid-main">
+            <!-- LEFT COLUMN -->
+            <div class="left-col">
+                <section class="panel">
+                    <h2>2.0 FORWARD KINEMATICS (END EFFECTOR)</h2>
+
+                    <p style="font-size: 0.8rem; color: var(--border-panel); margin-bottom: 5px;">POSITION (XYZ)</p>
+                    <div class="coord-display">
+                        <div class="coord-box"><span>X:</span> <span id="fk-x" class="val">0.00</span></div>
+                        <div class="coord-box"><span>Y:</span> <span id="fk-y" class="val">0.00</span></div>
+                        <div class="coord-box"><span>Z:</span> <span id="fk-z" class="val">0.00</span></div>
+                    </div>
+
+                    <p style="font-size: 0.8rem; color: var(--border-panel); margin-bottom: 5px;">ORIENTATION (ROLL-PITCH-YAW)</p>
+                    <div class="coord-display" style="margin-bottom: 8px;">
+                        <div class="coord-box"><span>R:</span> <span id="fk-r" class="val">0.00</span></div>
+                        <div class="coord-box"><span>P:</span> <span id="fk-p" class="val">0.00</span></div>
+                        <div class="coord-box"><span>Y:</span> <span id="fk-w" class="val">0.00</span></div>
+                    </div>
+
+                    <div class="quat-display">
+                        QUAT ➔ [ <span id="fk-qw" class="val">1.0</span> , <span id="fk-qx" class="val">0.0</span> , <span id="fk-qy" class="val">0.0</span> , <span id="fk-qz" class="val">0.0</span> ]
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>2.1 FRAME INSPECTOR (DEBUGGER)</h2>
+                    <div class="settings-group" style="margin-bottom: 10px;">
+                        <label>TARGET FRAME:</label>
+                        <select id="frame-select" onchange="changeInspectFrame(this.value)" style="width: 250px;">
+                            <option value="-1" selected>End Effector (Final Frame)</option>
+                        </select>
+                    </div>
+                    <div class="grid-2">
+                        <div class="matrix-container">
+                            <p>LOCAL T ( i-1 ➔ i ):</p>
+                            <pre id="matrix-local" style="font-size: 0.7rem;"></pre>
+                        </div>
+                        <div class="matrix-container">
+                            <p>GLOBAL T ( Base ➔ i ):</p>
+                            <pre id="matrix-global" style="font-size: 0.7rem;"></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>3.0 INVERSE KINEMATICS (IK)</h2>
+                    <div class="ik-settings-box">
+                        <p class="ik-subtitle">SOLVER OPTIONS (DAMPED LEAST SQUARES)</p>
+                        <div class="ik-grid">
+                            <label>MAX ITER:<br><input type="number" id="ik-iter" value="200"></label>
+                            <label>TOLERANCE:<br><input type="number" id="ik-tol" value="0.01" step="0.01"></label>
+                            <label>LEARN RATE:<br><input type="number" id="ik-lr" value="0.5" step="0.1"></label>
+                            <label>DAMPING (λ):<br><input type="number" id="ik-damp" value="0.1" step="0.1"></label>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label style="cursor: pointer;"><input type="checkbox" id="ik-usedls" checked> Enable DLS (Levenberg-Marquardt)</label>
+                        </div>
+                    </div>
+
+                    <p class="ik-subtitle" style="margin-top: 15px;">SINGLE TARGET SOLVE</p>
+                    <div class="ik-inputs">
+                        <div class="input-group"><label>X</label><input type="number" id="ik-x" value="10"></div>
+                        <div class="input-group"><label>Y</label><input type="number" id="ik-y" value="10"></div>
+                        <div class="input-group"><label>Z</label><input type="number" id="ik-z" value="10"></div>
+                        <button class="btn" style="align-self: flex-end;" onclick="solveSingleIK()">SOLVE</button>
+                    </div>
+
+                    <div id="ik-telemetry" class="ik-telemetry">
+                        <div>ERROR DIST: <span id="ik-err">--</span> <span class="unit-text"></span></div>
+                        <div>STATUS: <span id="ik-stat" class="status-badge bg-gray">WAITING</span></div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>4.0 MOTION PLANNING & WORKSPACE</h2>
+                    <p class="ik-subtitle">WORKSPACE POINT CLOUD (MONTE CARLO)</p>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <input type="number" id="ws-pts" value="1500" style="width: 80px;" title="Samples">
+                        <button class="btn" style="flex-grow: 1;" onclick="generateWorkspace()">GENERATE WORKSPACE</button>
+                        <button class="btn btn-danger" onclick="clearWorkspace()">CLEAR</button>
+                    </div>
+
+                    <p class="ik-subtitle" style="border-top: 1px dashed var(--border-panel); padding-top: 10px;">TRAJECTORY KEYFRAMES</p>
+                    <div style="margin-bottom: 10px;">
+                        <select id="traj-mode" style="width: 100%;">
+                            <option value="joint">Linear Joint Space (LJP - Smooth Arcs)</option>
+                            <option value="cartesian">Linear Cartesian Space (LSP - Straight Lines via IK)</option>
+                        </select>
+                    </div>
+                    <div class="waypoint-controls">
+                        <button class="btn btn-alert" onclick="addKeyframe()">+ RECORD POSE</button>
+                        <button class="btn btn-danger" onclick="clearKeyframes()">CLEAR</button>
+                    </div>
+                    <ul id="keyframe-list" class="waypoint-list" style="margin-bottom: 10px;"></ul>
+                    <button class="btn full-width" style="background: var(--text-highlight); color: var(--bg-blue); font-weight: bold;" onclick="playTrajectory()">▶ PLAY TRAJECTORY</button>
+                </section>
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="right-col">
+                <section class="panel viz-panel" id="viz-container">
+                    <div class="panel-header" style="margin-bottom: 10px;">
+                        <h2>5.0 KINEMATIC PREVIEW & CONTROLS</h2>
+                        <button class="btn btn-enlarge" onclick="toggleFullscreen()" id="btn-enlarge">⛶ ENLARGE</button>
+                    </div>
+
+                    <!-- COLLISION BOX MOVED HERE SO IT ENLARGES WITH FULLSCREEN! -->
+                    <div id="collision-alert" class="collision-box bg-green" style="margin-top: 0px; margin-bottom: 15px;">
+                        ✔️ KINEMATIC CHAIN CLEAR (NO COLLISIONS)
+                    </div>
+
+                    <div class="viz-content">
+                        <div id="3d-preview"></div>
+                        <div class="slider-wrapper">
+                            <div class="slider-header">LIVE JOINT CONTROLS</div>
+                            <div id="slider-panel" class="slider-panel"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- DH CHEAT SHEET MODAL -->
+    <div class="modal-overlay" id="dh-modal">
+        <div class="modal-content">
+            <div class="modal-header"><h2>DENAVIT-HARTENBERG CHEAT SHEET</h2><span class="modal-close" onclick="closeModal()">✖</span></div>
+            <div class="modal-body" id="modal-text"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
